@@ -1,0 +1,417 @@
+---
+title: "Experiment 2 - Prime discrimination task"
+author: "Didino Daniele"
+date: "October 2021"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = "#>",
+  collapse = TRUE,
+  echo = TRUE)
+```
+
+This file is part of the supplementary material of the manuscript:
+Didino, D., Brandtner, M., & Knops, A. (2021). No influence of masked priming 
+on the multiplication fact retrieval in a result verification task.
+
+This script analyzes the Forced-choice prime detection task of experiment 2.
+The analysis is based on both accuracy and d' (see function **return_d_prime** 
+for the formula used to calculate it).
+
+Dataset loaded: **exp_soa_data_PDT.csv** (data of
+*forced-choice prime detection tasks* (PDT))
+
+Load libraries and data:
+
+```{r}
+library('tidyverse')
+library('here')
+library('janitor')
+library('plotly')
+library('ggpubr')
+# library('knitr')
+library('kableExtra')
+library('BayesFactor')
+
+# Load my functions
+source(here('funcs', 'load_my_functions.R'))
+
+# Load data
+exp2_pdt <- read_csv(here('data', 'rawdata', 'exp_soa_data_PDT.csv'))
+```
+
+
+Select the same participants included in the analysis on RT for the 
+*result verification task*.
+
+```{r}
+exp2_pdt_sj <- 
+  exp2_pdt %>% 
+  filter(!(sj %in% c('sj15', 'sj17', 'sj24', 'sj28', 'sj29', 'sj31')))
+```
+
+
+### Plot RTs
+
+Plot RT (across sj, accuracy and SOA)
+
+```{r, fig.height = 6, fig.width = 9, fig.align = 'center'}
+exp2_pdt_sj %>% 
+  mutate(acc = as.factor(acc)) %>% 
+  ggplot(data = .) +
+  geom_boxplot(
+    mapping = aes(x = sj, y = RT)
+  ) +
+  geom_point(
+    mapping = aes(x = sj, y = RT, colour =  acc),
+    position = position_dodge(0.9, preserve = 'total'),
+    shape = 1
+  ) +
+  facet_wrap(~SOA, nrow = 3)
+```
+
+
+### Plot accuracy
+
+Plot accuracy by SOA and subject
+
+```{r, fig.height = 7, fig.width = 9, fig.align = 'center'}
+plot_PVT <- 
+  exp2_pdt_sj %>% 
+  group_by(sj, SOA) %>%
+  summarise(acc = mean(acc)) %>%
+  ungroup() %>%
+  ggplot(aes(x = acc, y = sj, colour =  SOA)) +
+  geom_point(position = position_dodge(0.5, preserve = 'total')) +
+  coord_cartesian(xlim = c(0, 1)) +
+  geom_vline(xintercept = c(0.4, 0.5, 0.6),
+             linetype = 'dashed',
+             color = c('grey', 'black', 'grey'),
+             size = 0.5)
+
+ggplotly(plot_PVT)
+```
+
+
+Tables are created with the my function *return_info()*
+```{r}
+tb <- 
+  return_info(exp2_pdt_sj)
+```
+
+
+```{r}
+tb$gender
+```
+
+```{r}
+tb$age
+```
+
+```{r}
+tb$error
+```
+
+```{r}
+tb$omitted
+```
+
+```{r}
+tb$timing
+```
+
+```{r}
+tb$less_200
+```
+
+
+Calculate statistics for accuracy (across SOA, prime type, and probe type)
+
+```{r}
+exp2_pdt_sj %>% 
+  return_stats(c('SOA', 'prime_type', 'probe_type'), DV = 'acc') %>% 
+  make_table('Accuracy')
+```
+
+
+### Analysis on accuracy 
+
+Plot accuracy by SOA
+
+```{r, fig.height = 6, fig.width = 7, fig.align = 'center'}
+plot_acc_soa_OLD <- 
+  exp2_pdt_sj %>% 
+  group_by(sj, SOA) %>%
+  summarise(acc = mean(acc)) %>%
+  ungroup() %>% 
+  ggplot(aes(x = SOA, y = acc, fill = SOA)) +
+  geom_flat_violin(position = position_nudge(x = 0.1, y = 0),
+                   adjust = 1.5,
+                   trim = TRUE,
+                   alpha = .5,
+                   colour = NA) +
+  geom_point(aes(x = as.numeric(factor(SOA)) - 0.15, y = acc, colour = SOA),
+             position = position_jitter(width = 0.05, height = 0),
+             size = 2,
+             shape = 20) +
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.5,
+               width = 0.1,
+               colour = "black") +
+  guides(fill = 'none') +
+  guides(color = 'none') +
+  scale_colour_brewer(palette = 'Dark2') +
+  scale_fill_brewer(palette = 'Dark2') +
+  geom_hline(yintercept = 0.5,
+             linetype = 'dashed',
+             color = 'red',
+             size = 0.3)
+
+plot_acc_soa_OLD
+```
+
+
+```{r, fig.height = 6, fig.width = 7, fig.align = 'center'}
+plot_acc_soa <- 
+  exp2_pdt_sj %>% 
+  group_by(sj, SOA) %>%
+  summarise(acc = mean(acc)) %>%
+  ungroup() %>% 
+  ggplot(aes(x = SOA, y = acc, fill = SOA)) +
+  geom_boxplot(outlier.shape = NA,
+               width = 0.2) +
+  geom_point(aes(x = as.numeric(factor(SOA)) - 0.25, y = acc, colour = SOA),
+             position = position_jitter(width = 0.05, height = 0),
+             size = 2,
+             colour = "gray40",
+             shape = 20) +
+  labs(x = 'SOA', y = 'Accuracy') +
+  # ylim(0, 1) +
+  guides(fill = 'none') +
+  guides(color = 'none') +
+  scale_fill_manual(values = c('gray70', 'gray70', 'gray70')) +
+  scale_color_manual(values = c('gray70', 'gray70', 'gray70')) +
+  theme(
+    #panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(colour = 'grey90'),
+    panel.grid.minor.y = element_line(colour = 'grey90'),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    strip.background = element_blank(),
+    text = element_text(size = 12),
+    axis.text = element_text(size = 10, colour = 'black'),
+    # axis.text.x = element_text(angle = 45, hjust = 1),
+    # axis.title = element_text(size = 14),
+    panel.border = element_rect(colour = 'black', fill = NA, size = 0.5)
+  )
+
+plot_acc_soa
+```
+
+
+
+Calculate accuracy mean by participant and SOA
+
+```{r}
+exp2_pdt_mean_acc <- 
+  exp2_pdt_sj %>% 
+  return_means(acc, c('sj', 'SOA'), .)
+```
+
+
+Compute Bayes factors
+
+```{r}
+exp2_pdt_bf <- 
+  exp2_pdt_mean_acc %>% 
+  group_by(SOA) %>% 
+  nest() %>% 
+  mutate(
+    BF_test = map(data,
+                   ~ttestBF(x = .x$DV,
+                            mu = 0.5)),
+    BF_value = map(BF_test,
+                   ~extractBF(.) %>% 
+                     tibble %>% 
+                     select(bf, error))
+  ) %>% 
+  unnest(BF_value)
+```
+
+
+Calculate statistics for accuracy
+
+```{r}
+exp2_pdt_stats <-
+  exp2_pdt_sj %>% 
+  return_stats(c('SOA'), DV = 'acc')
+
+```
+
+
+### Table: accuracy and Bayes factor
+
+Table with accuracy mean, standard deviation and standard error (aggregated on 
+subject, and SOA), and Bayes factors:
+
+
+```{r}
+exp2_table3 <- 
+  full_join(
+    exp2_pdt_stats %>% 
+      mutate(across(where(is.numeric), ~round(.x, digits = 3))),
+    exp2_pdt_bf %>% 
+      select(SOA, bf) %>% 
+      rename(BF_10 = bf) %>% 
+      mutate(across(where(is.numeric), ~signif(.x, 1))))
+
+# Show results
+exp2_table3 %>% 
+   make_table('Accuracy and  Bayes factor (across SOA)')
+```
+
+
+
+# Calculate d' sensitivity measures
+
+The d' is calculated for each subject and each SOA (SOA_170, SOA_120, SOA_70)
+
+```{r}
+# Calculate d'
+d_prime <- 
+  exp2_pdt_sj %>% 
+  return_d_prime()
+
+# Print the results in csv and txt files
+d_prime %>% 
+  make_table('d prime (and statistics used to calculate it) across subjects')
+```
+
+In order to have a valid d' value, the accuracy must **NOT** be 0 or 1. If 
+accuracy is 0 or 1, then d' cannot be computed (in this case R output is 
+"*infinite*").
+
+The following plot report accuracy across subject, SOA and prime type (letter vs. 
+number). Some subject have accuracy equal to 1 (in the plot, the *purple lines* 
+represent accuracy 0 and 1), and thus d' cannot be computed.
+
+```{r, fig.height = 7, fig.width = 9, fig.align = 'center'}
+plot_PVT <- 
+  exp2_pdt_sj %>% 
+  group_by(sj, SOA, prime_type) %>%
+  summarise(acc = mean(acc)) %>%
+  ungroup() %>%
+  ggplot(aes(x = acc, y = sj, colour =  SOA, shape = prime_type)) +
+  geom_point(position = position_dodge(0.5, preserve = 'total')) +
+  coord_cartesian(xlim = c(0, 1)) +
+  geom_vline(xintercept = c(0, 1),
+             linetype = 'dashed',
+             color = 'purple',
+             size = 0.3)
+
+ggplotly(plot_PVT)
+```
+
+
+The d' can be computed in all SOA conditions only for the following subjects:
+1, 3, 4, 7, 10, 13, 14, 18, 19, 26, 33
+
+```{r}
+# Check whether d' values is infinite or NA
+sj_excluded <- 
+  d_prime %>% 
+  filter(is.infinite(d_prime) | is.na(d_prime)) %>%  
+  pull(sj) %>% 
+  unique()
+
+# Subject excluded: sj03, sj06, sj13, sj14, sj15, sj16, sj28
+sj_excluded
+
+# Subject selected: sj03, sj06, sj13, sj14, sj15, sj16, sj28
+setdiff(unique(d_prime$sj), sj_excluded)
+```
+
+
+Select subjects with finite d' values.
+
+```{r}
+# exclude sj with infinite d'
+d_prime_f <- 
+  d_prime %>% 
+  filter(!(sj %in% sj_excluded))
+```
+
+
+Statistics for d'
+
+```{r}
+# Calculate mean d'
+t_mean_d_prime <- 
+  d_prime_f %>%
+  return_stats(., c('SOA'), DV = 'd_prime')
+
+# Show the table with the statistics
+t_mean_d_prime %>%
+  make_table('d prime statistics')
+```
+
+
+Plot d prime by SOA
+
+```{r, fig.height = 6, fig.width = 8, fig.align = 'center'}
+d_prime_f %>% 
+  ggplot(aes(x = SOA, y = d_prime, fill = SOA)) +
+  geom_flat_violin(aes(fill = SOA),
+                   position = position_nudge(x = .1, y = 0),
+                   adjust = 1.5,
+                   trim = FALSE,
+                   alpha = .5,
+                   colour = NA) +
+  geom_point(aes(x = as.numeric(factor(SOA)) - .15, y = d_prime, colour = SOA),
+             position = position_jitter(width = .05),
+             size = 2,
+             shape = 20) +
+  geom_boxplot(aes(x = SOA, y = d_prime, fill = SOA),
+               outlier.shape = NA,
+               alpha = .5,
+               width = .1,
+               colour = "black") +
+  scale_colour_brewer(palette = "Dark2") +
+  scale_fill_brewer(palette = "Dark2") +
+  geom_hline(yintercept = 0,
+             linetype = 'dashed',
+             color = 'red',
+             size = 0.5)
+```
+
+### Conclusions
+
+Despite the masking, both accuracy and d' clearly show that participants could 
+perceive the prime.
+
+
+# Save plots in a file
+
+```{r, fig.show='hide'}
+ggarrange(plot_acc_soa)
+ggsave(here('figures', 'exp2_PDT_acc.tiff'),
+       width = 4,
+       height = 3,
+       dpi = 150) # or dpi = 300
+```
+
+
+# session information
+
+```{r}
+xfun::session_info()
+```
+
+
+

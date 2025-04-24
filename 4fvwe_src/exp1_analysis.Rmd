@@ -1,0 +1,520 @@
+---
+title: 'Experiment 1 - analysis'
+author: 'Didino Daniele'
+date: 'October 2021'
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = '#>',
+  collapse = TRUE,
+  echo = TRUE)
+```
+
+This file is part of the supplementary material of the manuscript:
+Didino, D., Brandtner, M., & Knops, A. (2021). No influence of masked priming 
+on the multiplication fact retrieval in a result verification task.
+
+This script reports the analysis for experiment 1.
+
+Dataset loaded: **exp1_data.rds** (data of *result verification task*)
+
+Load libraries, my functions (**my_functions** folder) and data 
+(**data/processed** folder):
+
+```{r}
+library('ggpubr')
+library('here')
+library('kableExtra')
+# library('knitr')
+library('plotly')
+library('ggridges')
+library('tidyverse')
+library('BayesFactor')
+
+# Load my functions
+source(here('funcs', 'load_my_functions.R'))
+
+# Load data
+exp1 <- readRDS(here('data', 'processed', 'exp1_data.rds'))
+```
+
+
+Exclude outliers
+
+```{r}
+exp1 <- 
+  exp1 %>% 
+  filter(outlier == FALSE)
+```
+
+
+# RTs plots
+
+RTs distribution across prime conditions:
+
+```{r, fig.height = 6, fig.width = 8, fig.align = 'center'}
+plot_1 <-
+  exp1 %>% 
+  ggplot(aes(RT, fill = prime_cond)) +
+  geom_density(alpha = 0.6) +
+  facet_wrap(~ problem_size, ncol = 2) 
+
+ggplotly(plot_1)
+```
+
+
+Comparison between the distribution of the RTs of the neutral condition and the
+other conditions. The neutral condition is replicated next to each condition to
+facilitate the comparison.
+
+```{r, fig.height = 6, fig.width = 9, fig.align = 'center'}
+exp1_rainplot <- 
+  exp1 %>% 
+  return_means(RT, c('problem_size', 'sj', 'prime_cond'), .) %>% 
+  return_df_plot(problem_size,
+                 prime_cond,
+                 'neutral')
+
+# Set H0/H1 position
+segs <- 
+  tribble(
+    ~problem_size, ~cond,       ~neutral,        ~lab, ~ys,
+    'Large',       'identity',  'Neutral', 'H1', 950,
+    'Large',       'neigh_inc', 'Neutral', 'H1', 950,
+    'Large',       'unrel_con', 'Neutral', 'H0', 950,
+    'Large',       'unrel_inc', 'Neutral', 'H1', 950,
+    'Small',       'identity',  'Neutral', 'H1', 950,
+    'Small',       'neigh_inc', 'Neutral', 'H1', 950,
+    'Small',       'unrel_con', 'Neutral', 'H1', 950,
+    'Small',       'unrel_inc', 'Neutral', 'H1', 950)
+
+# Plot
+prime_plot <- 
+ list(exp1_RT_distr =
+        exp1_rainplot %>% 
+        mutate(
+          neutral = if_else(neutral == 'neutral', 'Neutral', 'Other'),
+          problem_size = if_else(problem_size == 'large', 'Large', 'Small')
+          ) %>% 
+        ggplot(aes(x = cond, y = DV, fill = neutral)) +
+        geom_flat_violin(aes(fill = neutral),
+                         position = position_nudge(x = 0.18, y = 0),
+                         adjust = 1.5,
+                         trim = FALSE,
+                         alpha = .5,
+                         colour = NA) +
+        geom_point(aes(x = as.numeric(factor(cond)) - 0.23, y = DV, colour = neutral),
+                   position = position_jitter(width = 0.05, height = 0),
+                   size = 1,
+                   shape = 20) +
+        geom_boxplot(aes(x = cond, y = DV, fill = neutral),
+                     outlier.shape = NA,
+                     alpha = 0.5,
+                     width = 0.3,
+                     colour = 'black') +
+        geom_text(data = segs,
+                  aes(x = cond,  y = ys, label = lab),
+                  size = 3.5) + 
+        geom_vline(xintercept = c(c(0:3) + 1.65),
+                   linetype = 'solid',
+                   color = 'grey80',
+                   size = 0.3) +
+        # scale_colour_brewer(palette = 'Dark2') +
+        # scale_fill_brewer(palette = 'Dark2') +
+        labs(x = 'Prime condition', y = 'RTs') +
+        facet_wrap(~ problem_size, ncol = 1, strip.position = 'right') +
+        theme(
+          #panel.grid.major = element_blank(),
+          #panel.grid.minor = element_blank(),
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line(colour = 'grey90'),
+          panel.grid.minor.y = element_line(colour = 'grey90'),
+          panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          legend.title = element_blank(),
+          strip.background = element_blank(),
+          text = element_text(size = 15),
+          axis.text = element_text(size = 12, colour = 'black'),
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          # axis.title = element_text(size = 14),
+          panel.border = element_rect(colour = 'black', fill = NA, size = 0.5)
+        )
+ )
+
+# show plot
+prime_plot$exp1_RT_distr
+```
+
+
+```{r}
+# Plot - Black and white version
+prime_plot$exp1_RT_distr_bw <- 
+  exp1_rainplot %>% 
+  mutate(
+    neutral = if_else(neutral == 'neutral', 'Neutral', 'Other'),
+    problem_size = if_else(problem_size == 'large', 'Large', 'Small')
+    ) %>% 
+  ggplot(aes(x = cond, y = DV, fill = neutral)) +
+  geom_flat_violin(position = position_nudge(x = 0.15, y = 0),
+                   adjust = 1.5,
+                   trim = FALSE,
+                   alpha = .5,
+                   colour = 'black') +
+  geom_point(aes(x = as.numeric(factor(cond)) - 0.2, y = DV),
+             position = position_jitter(width = 0.05, height = 0),
+             size = 1,
+             shape = 21) +
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.5,
+               width = 0.25) +
+  geom_text(data = segs,
+            aes(x = cond,  y = ys, label = lab),
+            size = 3.5) + 
+  geom_vline(xintercept = c(c(0:3) + 1.65),
+             linetype = 'solid',
+             color = 'grey80',
+             size = 0.3) +
+  scale_fill_manual(values = c('white', 'grey20')) +
+  scale_color_manual(values = c('white', 'grey20')) +
+  labs(x = 'Prime condition', y = 'RTs') +
+  facet_wrap(~ problem_size, ncol = 1, strip.position = 'right') +
+  theme(
+    #panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(colour = 'grey90'),
+    panel.grid.minor.y = element_line(colour = 'grey90'),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    legend.title = element_blank(),
+    strip.background = element_blank(),
+    text = element_text(size = 15),
+    axis.text = element_text(size = 12, colour = 'black'),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    # axis.title = element_text(size = 14),
+    panel.border = element_rect(colour = 'black', fill = NA, size = 0.5)
+  )
+```
+
+
+# Bayes factor
+
+Bayes factors are computer with the package **BayesFactor**.
+
+```{r}
+tribble(
+  ~BF,      ~Evidence,
+  '0-3',    'Anectodal',
+  '3-10',   'Moderate',
+  '10-30',  'Strong',
+  '30-100', 'Very_strong',
+  '>100',   'Decisive') %>% 
+   make_table('Bayes factor interpretation')
+```
+
+Compute Bayes factors
+
+```{r}
+exp1_bf <- 
+  exp1 %>% 
+  return_BF_ttest(problem_size,
+                  prime_cond,
+                  'neutral',
+                  RT,
+                  ID = 'sj')
+
+exp1_bf
+
+exp1_bf <- 
+  exp1_bf %>%
+  select(problem_size, prime_cond.x, bf) %>% 
+  rename(prime_cond = prime_cond.x, BF_10 = bf) %>% 
+  mutate(
+    BF_01 = 1 / BF_10
+  ) 
+
+# # Print results in a file
+# exp1_bf %>% 
+#   mutate(across(where(is.numeric), ~round(.x, digits = 2))) %>% 
+#   print_result('exp1_BF')
+# 
+# # Show results
+# exp1_bf %>% 
+#   make_table('Bayes factor')
+```
+
+
+Calculate statistics for RT
+
+```{r}
+# Calculate statistics
+exp1_stats <- 
+  exp1 %>%
+  return_stats(c('problem_size', 'prime_cond'))
+
+# Add difference between prime means and neutral prime mean
+exp1_stats <- 
+  left_join(
+    exp1_stats,
+    exp1_stats %>% 
+      filter(prime_cond == 'neutral') %>% 
+      select(problem_size, Mean) %>% 
+      rename(Diff = Mean)
+  ) %>% 
+  mutate(
+    Diff = Mean - Diff
+  )
+
+# # Print results in a file
+# exp1_stats %>% 
+#   mutate(across(where(is.numeric), round)) %>% 
+#   print_result('exp1_stats_RTs')
+# 
+# # Show results
+# exp1_stats %>% 
+#    make_table('Statistics (prime condition by problem size)')
+```
+
+
+
+# Table 1
+
+Table with RTs mean, standard deviation and standard error (aggregated on 
+subject and condition), and Bayes factors:
+
+```{r}
+exp1_table <- 
+  full_join(
+    exp1_stats %>% 
+      mutate(across(where(is.numeric), ~round(.x, digits = 0))),
+    exp1_bf %>% 
+      mutate(across(where(is.numeric), ~round(.x, digits = 2))))
+
+# Print results in a file
+exp1_table %>% 
+  # mutate(across(where(is.numeric), ~round(.x, digits = 2))) %>% 
+  print_result('exp1_table')
+
+# Show results
+exp1_table %>% 
+   make_table('Table1')
+```
+
+
+### Plot prime conditions
+
+```{r, fig.height = 6, fig.width = 5, fig.align = 'center'}
+# Set bar colors ("neutral" is the 4th and the 10th)
+bar_colors <- c('gray80', 'gray80', 'gray80', 'gray40', 'gray80', 'gray80',
+                'gray80', 'gray80', 'gray80', 'gray40', 'gray80', 'gray80')
+
+# Set H0/H1 position
+segs <- 
+  tribble(
+    ~problem_size, ~prime_cond, ~lab, ~ys,
+     'large',      'identity',  'H1', 510,
+     'large',      'neigh_inc', 'H1', 510,
+     'large',      'unrel_con', 'H0', 510,
+     'large',      'unrel_inc', 'H1', 510,
+     'small',      'identity',  'H1', 540,
+     'small',      'neigh_inc', 'H1', 510,
+     'small',      'unrel_con', 'H1', 510,
+     'small',      'unrel_inc', 'H1', 510)
+
+# plot prime type
+prime_plot$exp1_box <- 
+  exp1_stats %>% 
+  mutate(
+    prime_cond = factor(
+      prime_cond,
+      levels = c('identity', 'neutral', 'neigh_con', 'neigh_inc', 'unrel_con', 'unrel_inc')
+  )) %>% 
+  ggplot(aes(x = prime_cond, y = Mean, fill = prime_cond)) +
+  geom_bar(stat = 'identity',
+           fill = bar_colors,
+           width = 0.6,
+           show.legend = FALSE) +
+  geom_errorbar(
+    aes(group = prime_cond, ymin = Mean - SE, ymax = Mean + SE),
+    width = 0.07,
+    position = position_dodge(0.9)) +
+  geom_text(data = segs,
+            aes(x = prime_cond,  y = ys, label = lab),
+            size = 3) +
+  coord_cartesian(ylim = c(500, 675)) +
+  labs(x = 'Prime cond', y = 'Mean RTs') +
+  facet_wrap(~problem_size, ncol = 1) +
+  theme(
+    # panel.grid.major = element_blank(),
+    # panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(colour = 'grey90'),
+    panel.grid.minor.y = element_line(colour = 'grey90'),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    text = element_text(size = 15),
+    axis.text = element_text(size = 12, colour = 'black'),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    # axis.title = element_text(size = 14),
+    panel.border = element_rect(colour = 'black', fill = NA, size = 0.5))
+
+# show plot
+prime_plot$exp1_box
+```
+
+
+
+### Plot Bayes factors
+
+```{r, fig.height = 6, fig.width = 5, fig.align = 'center'}
+# Set asterisk position
+segs <- 
+  tribble(
+    ~problem_size, ~prime_cond, ~lab,    ~ys,
+     'large',      'identity',   '>100',  95,
+     'large',      'neigh_con',  '',      95,
+     'large',      'neigh_inc',  '>100',  95,
+     'large',      'unrel_con',  '',      95,
+     'large',      'unrel_inc',  '',      95,
+     'small',      'identity',   '>100',  95,
+     'small',      'neigh_con',  '',      95,
+     'small',      'neigh_inc',  '',      95,
+     'small',      'unrel_con',  '>100',  95,
+     'small',      'unrel_inc',  '',      95,
+  )
+
+# plot prime type
+prime_plot$exp1_bf <- 
+  exp1_bf %>% 
+  mutate(
+    prime_cond = factor(
+      prime_cond,
+      levels = c('identity', 'neigh_con', 'neigh_inc', 'unrel_con', 'unrel_inc')),
+    BF_10 = case_when(
+      BF_10	> 100 ~ 100,
+      TRUE ~ BF_10
+    )
+  ) %>% 
+  ggplot(aes(x = prime_cond, y = BF_10, fill = prime_cond)) +
+  geom_bar(stat = 'identity',
+           fill = 'gray80',
+           width = 0.6,
+           show.legend = FALSE) +
+  geom_text(data = segs,
+                  aes(x = prime_cond,  y = ys, label = lab),
+                  size = 3) +
+  geom_hline(yintercept = c(3, 10, 30, 100),
+             linetype = 'dashed',
+             color = 'red',
+             size = 0.5) +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(x = 'Prime cond', y = bquote('Bayes factor (' ~BF[10]~ ')')) +
+  facet_wrap(~problem_size, ncol = 1) +
+  theme(
+    #panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(colour = 'grey90'),
+    panel.grid.minor.y = element_line(colour = 'grey90'),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    text = element_text(size = 15),
+    axis.text = element_text(size = 12, colour = 'black'),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    # axis.title = element_text(size = 14),
+    panel.border = element_rect(colour = 'black', fill = NA, size = 0.5))
+  NULL
+
+# show plot
+prime_plot$exp1_bf
+```
+
+
+# Frequentist t-tests 
+
+
+Calculate the t-tests between neutral prime and other conditions (the results 
+are also saved in the folder **results**)
+
+```{r}
+# prepare conditions to compare in the t-tests
+prime_cond_to_comprare <- 
+  list(c('identity', 'neutral'),
+       c('neigh_con', 'neutral'),
+       c('neigh_inc', 'neutral'),
+       c('unrel_con', 'neutral'),
+       c('unrel_inc', 'neutral'))
+
+
+# t-tests between prime conditions
+exp1_ttests <- 
+  exp1 %>% 
+  group_by(problem_size) %>% 
+  group_nest() %>% 
+  mutate(
+    ttests = map(
+      data,
+      ~return_ttest_2samples(RT,
+                             prime_cond,
+                             prime_cond_to_comprare,
+                             c('sj', 'prime_cond'),
+                             .)
+  )) %>% 
+  select(problem_size, ttests) %>% 
+  unnest(ttests) %>% 
+  mutate(
+    p_adj = p.adjust(p, method = 'holm'),
+    Sig_adj = p.adjust(p, method = 'holm') < 0.05
+  )
+
+# Print the results in csv and txt files
+exp1_ttests %>% 
+  print_result(., 'exp1_ttests')
+
+# Show the table with the statistics
+exp1_ttests %>%
+  make_table('T-tests for experiment 1')
+```
+
+
+# Save plots in a file
+
+```{r, fig.show='hide'}
+ggarrange(prime_plot$exp1_RT_distr)
+ggsave(here('figures', 'exp1_RTs_distr.tiff'),
+       width = 9,
+       height = 5,
+       dpi = 150) # or dpi = 300
+
+ggarrange(prime_plot$exp1_RT_distr_bw)
+ggsave(here('figures', 'exp1_RTs_distr_bw.tiff'),
+       width = 9,
+       height = 5,
+       dpi = 150) # or dpi = 300
+
+ggarrange(prime_plot$exp1_box)
+ggsave(here('figures', 'exp1_RTs.tiff'),
+       width = 8,
+       height = 6,
+       dpi = 150) # or dpi = 300
+
+ggarrange(prime_plot$exp1_bf)
+ggsave(here('figures', 'exp1_BF.tiff'),
+       width = 8,
+       height = 6,
+       dpi = 150) # or dpi = 300
+```
+
+
+# session information
+
+```{r}
+xfun::session_info()
+```
+
+
+

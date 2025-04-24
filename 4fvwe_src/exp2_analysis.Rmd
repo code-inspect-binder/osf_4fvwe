@@ -1,0 +1,532 @@
+---
+title: 'Experiment 2 - analysis'
+author: 'Didino Daniele'
+date: 'October 2021'
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = '#>',
+  collapse = TRUE,
+  echo = TRUE)
+```
+
+This file is part of the supplementary material of the manuscript:
+Didino, D., Brandtner, M., & Knops, A. (2021). No influence of masked priming 
+on the multiplication fact retrieval in a result verification task.
+
+This script reports the analysis for experiment 2.
+
+Dataset loaded: **exp2_data.rds** (data of *result verification task*)
+
+Load libraries, my functions (**my_functions** folder) and data 
+(**data/processed** folder):
+
+```{r}
+library('ggpubr')
+library('here')
+library('kableExtra')
+# library('knitr')
+library('plotly')
+library('ggridges')
+library('tidyverse')
+library('BayesFactor')
+
+# Load my functions
+source(here('funcs', 'load_my_functions.R'))
+
+# Load data
+exp2 <- readRDS(here('data', 'processed', 'exp2_data.rds'))
+```
+
+
+Exclude outliers
+
+```{r}
+exp2 <- 
+  exp2 %>% 
+  filter(outlier == FALSE)
+```
+
+
+# RTs plots
+
+RTs distribution across prime conditions:
+
+```{r, fig.height = 6, fig.width = 9, fig.align = 'center'}
+plot_1 <-
+  exp2 %>% 
+  ggplot(aes(RT, fill = prime_cond)) +
+  geom_density(alpha = 0.6) +
+  facet_wrap(~ SOA + problem_size, ncol = 2) +
+  theme(panel.spacing = unit(1, "cm"))
+
+ggplotly(plot_1)
+```
+
+
+Comparison between the distribution of the RTs of the neutral condition and the
+other conditions. The neutral condition is replicated next to each condition to
+facilitate the comparison.
+
+```{r, fig.height = 10, fig.width = 12, fig.align = 'center'}
+exp2_rainplot <- 
+  exp2 %>%
+  group_by(SOA) %>% 
+  group_nest() %>% 
+  mutate(
+    by_SOA = map(
+      data,
+      ~return_means(RT, c('problem_size', 'sj', 'prime_cond'), .) %>% 
+        return_df_plot(.,
+                       problem_size,
+                       prime_cond,
+                       'neutral')
+    )
+  ) %>% 
+  unnest(by_SOA)
+
+
+# Set H0/H1 position
+segs <- 
+  tribble(
+    ~SOA,      ~problem_size, ~cond,       ~neutral,  ~lab, ~ys,
+    'SOA_070', 'Large',       'neigh_con', 'Neutral', 'H0', 1000,
+    'SOA_070', 'Large',       'unrel_con', 'Neutral', 'H0', 1000,
+    'SOA_070', 'Small',       'neigh_con', 'Neutral', 'H0', 1000,
+    'SOA_070', 'Small',       'unrel_con', 'Neutral', 'H0', 1000,
+    'SOA_120', 'Large',       'neigh_con', 'Neutral', 'H0', 1000,
+    'SOA_120', 'Large',       'neigh_inc', 'Neutral', 'H1', 1000,
+    'SOA_120', 'Large',       'unrel_inc', 'Neutral', 'H1', 1000,
+    'SOA_120', 'Small',       'neigh_con', 'Neutral', 'H0', 1000,
+    'SOA_120', 'Small',       'unrel_con', 'Neutral', 'H0', 1000,
+    'SOA_120', 'Small',       'unrel_inc', 'Neutral', 'H0', 1000,
+    'SOA_170', 'Large',       'neigh_con', 'Neutral', 'H0', 1000,
+    'SOA_170', 'Large',       'unrel_con', 'Neutral', 'H0', 1000,
+    'SOA_170', 'Small',       'neigh_con', 'Neutral', 'H1', 1000,
+    'SOA_170', 'Small',       'unrel_con', 'Neutral', 'H1', 1000,
+    'SOA_170', 'Small',       'unrel_inc', 'Neutral', 'H1', 1000)
+
+# Plot
+prime_plot <- 
+  list(exp2_RT_distr =
+         exp2_rainplot %>% 
+         mutate(
+           neutral = if_else(neutral == 'neutral', 'Neutral', 'Other'),
+           problem_size = if_else(problem_size == 'large', 'Large', 'Small')
+         ) %>% 
+         ggplot(aes(x = cond, y = DV, fill = neutral)) +
+         geom_flat_violin(aes(fill = neutral),
+                          position = position_nudge(x = 0.18, y = 0),
+                          adjust = 1.5,
+                          trim = FALSE,
+                          alpha = .5,
+                          colour = NA) +
+         geom_point(aes(x = as.numeric(factor(cond)) - 0.23, y = DV, colour = neutral),
+                    position = position_jitter(width = 0.05, height = 0),
+                    size = 1,
+                    shape = 20) +
+         geom_boxplot(aes(x = cond, y = DV, fill = neutral),
+                      outlier.shape = NA,
+                      alpha = 0.5,
+                      width = 0.3,
+                      colour = 'black') +
+         geom_text(data = segs,
+                   aes(x = cond,  y = ys, label = lab),
+                   size = 3.5) + 
+         geom_vline(xintercept = c(c(0:3) + 1.65),
+                    linetype = 'solid',
+                    color = 'grey80',
+                    size = 0.3) +
+         # scale_colour_brewer(palette = 'Dark2') +
+         # scale_fill_brewer(palette = 'Dark2') +
+         labs(x = 'Prime condition', y = 'RTs') +
+         facet_grid(rows = vars(SOA), cols = vars(problem_size)) +
+         theme(
+           #panel.grid.major = element_blank(),
+           #panel.grid.minor = element_blank(),
+           panel.background = element_blank(),
+           panel.grid.major.y = element_line(colour = 'grey90'),
+           panel.grid.minor.y = element_line(colour = 'grey90'),
+           panel.grid.major.x = element_blank(),
+           panel.grid.minor.x = element_blank(),
+           legend.title = element_blank(),
+           strip.background = element_blank(),
+           text = element_text(size = 15),
+           axis.text = element_text(size = 12, colour = 'black'),
+           axis.text.x = element_text(angle = 45, hjust = 1),
+           # axis.title = element_text(size = 14),
+           panel.border = element_rect(colour = 'black', fill = NA, size = 0.5)
+         )
+  )
+
+# show plot
+prime_plot$exp2_RT_distr
+```
+
+```{r}
+# Plot - Black and white version
+prime_plot$exp2_RT_distr_bw <- 
+  exp2_rainplot %>% 
+  mutate(
+    neutral = if_else(neutral == 'neutral', 'Neutral', 'Other'),
+    problem_size = if_else(problem_size == 'large', 'Large', 'Small')
+  ) %>% 
+  ggplot(aes(x = cond, y = DV, fill = neutral)) +
+  geom_flat_violin(position = position_nudge(x = 0.15, y = 0),
+                   adjust = 1.5,
+                   trim = FALSE,
+                   alpha = .5,
+                   colour = 'black') +
+  geom_point(aes(x = as.numeric(factor(cond)) - 0.2, y = DV),
+             position = position_jitter(width = 0.05, height = 0),
+             size = 1,
+             shape = 21) +
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.5,
+               width = 0.25) +
+  geom_text(data = segs,
+            aes(x = cond,  y = ys, label = lab),
+            size = 3.5) + 
+  geom_vline(xintercept = c(c(0:3) + 1.65),
+             linetype = 'solid',
+             color = 'grey80',
+             size = 0.3) +
+  scale_fill_manual(values = c('white', 'grey20')) +
+  scale_color_manual(values = c('white', 'grey20')) +
+  labs(x = 'Prime condition', y = 'RTs') +
+  facet_grid(rows = vars(SOA), cols = vars(problem_size)) +
+  theme(
+    #panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(colour = 'grey90'),
+    panel.grid.minor.y = element_line(colour = 'grey90'),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    legend.title = element_blank(),
+    strip.background = element_blank(),
+    text = element_text(size = 15),
+    axis.text = element_text(size = 12, colour = 'black'),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    # axis.title = element_text(size = 14),
+    panel.border = element_rect(colour = 'black', fill = NA, size = 0.5)
+  )
+```
+
+
+# Bayes factor
+
+Bayes factors are computer with the package **BayesFactor**.
+
+
+```{r}
+tribble(
+  ~BF,      ~Evidence,
+  '0-3',    'Anectodal',
+  '3-10',   'Moderate',
+  '10-30',  'Strong',
+  '30-100', 'Very_strong',
+  '>100',   'Decisive') %>% 
+   make_table('Bayes factor interpretation')
+```
+
+
+Compute Bayes factors
+
+```{r}
+exp2_bf <- 
+  exp2 %>% 
+  group_by(SOA) %>% 
+  group_nest() %>% 
+  mutate(
+    bf_soa = map(
+      data,
+      ~return_BF_ttest(.,
+                       problem_size,
+                       prime_cond,
+                       'neutral',
+                       RT,
+                       ID = 'sj')
+    )
+  ) %>% 
+  select(SOA, bf_soa) %>% 
+  unnest(bf_soa) %>% 
+  identity()
+
+exp2_bf
+
+exp2_bf <- 
+  exp2_bf %>%
+  select(SOA, problem_size, prime_cond.x, bf) %>% 
+  rename(prime_cond = prime_cond.x, BF_10 = bf) %>% 
+  mutate(
+    BF_01 = 1 / BF_10
+  ) 
+
+# # Show results
+# exp2_bf %>% 
+#   make_table('Bayes factor')
+```
+
+
+Calculate statistics for RT
+
+```{r}
+exp2_stats <-
+  exp2 %>% 
+  return_stats(c('SOA', 'problem_size', 'prime_cond'))
+
+# Add difference between prime means and neutral prime mean
+exp2_stats <- 
+  left_join(
+    exp2_stats,
+    exp2_stats %>% 
+      filter(prime_cond == 'neutral') %>% 
+      select(SOA, problem_size, Mean) %>% 
+      rename(Diff = Mean)
+  ) %>% 
+  mutate(
+    Diff = Mean - Diff
+  )
+
+# # Print results in a file
+# exp2_stats %>% 
+#   print_result('exp2_stats_RTs')
+# 
+# # Show the table with the statistics
+# exp2_stats %>%
+#   make_table('Prime type statistics')
+```
+
+
+# Table 2
+
+Table with RTs mean, standard deviation and standard error (aggregated on 
+subject, condition, and SOA), and Bayes factors:
+
+```{r}
+exp2_table <- 
+  full_join(
+    exp2_stats %>% 
+      mutate(across(where(is.numeric), ~round(.x, digits = 0))),
+    exp2_bf %>% 
+      mutate(across(where(is.numeric), ~round(.x, digits = 2))))
+
+# Print results in a file
+exp2_table %>% 
+  # mutate(across(where(is.numeric), ~round(.x, digits = 2))) %>% 
+  print_result('exp2_table')
+
+# Show results
+exp2_table %>% 
+   make_table('Table2')
+```
+
+
+### Plot prime conditions
+
+
+```{r, fig.height = 8, fig.width = 8, fig.align = 'center'}
+# Set bar colors ("neutral" is the 4th and the 10th)
+bar_colors <- rep(c('gray80', 'gray80', 'gray40', 'gray80', 'gray80'), 6)
+
+# Set asterisk position
+segs <- 
+  tribble(
+    ~SOA,      ~problem_size, ~prime_cond, ~lab, ~ys,
+    'SOA_070', 'large',       'neigh_con', 'H0', 520,
+    'SOA_070', 'large',       'unrel_con', 'H0', 520,
+    'SOA_070', 'small',       'neigh_con', 'H0', 520,
+    'SOA_070', 'small',       'unrel_con', 'H0', 520,
+    'SOA_120', 'large',       'neigh_con', 'H0', 520,
+    'SOA_120', 'large',       'neigh_inc', 'H1', 520,
+    'SOA_120', 'large',       'unrel_inc', 'H1', 520,
+    'SOA_120', 'small',       'neigh_con', 'H0', 520,
+    'SOA_120', 'small',       'unrel_con', 'H0', 520,
+    'SOA_120', 'small',       'unrel_inc', 'H0', 520,
+    'SOA_170', 'large',       'neigh_con', 'H0', 520,
+    'SOA_170', 'large',       'unrel_con', 'H0', 520,
+    'SOA_170', 'small',       'neigh_con', 'H1', 520,
+    'SOA_170', 'small',       'unrel_con', 'H1', 520,
+    'SOA_170', 'small',       'unrel_inc', 'H1', 520)
+
+# plot prime type
+prime_plot$exp2_box <- 
+  exp2_stats %>% 
+  mutate(
+    prime_cond = factor(
+      prime_cond,
+      levels = c('identity', 'neutral', 'neigh_con', 'neigh_inc', 'unrel_con', 'unrel_inc')
+  )) %>% 
+  ggplot(aes(x = prime_cond, y = Mean, fill = prime_cond)) +
+  geom_bar(stat = 'identity',
+           fill = bar_colors,
+           width = 0.6,
+           show.legend = FALSE) +
+  geom_errorbar(
+    aes(group = prime_cond, ymin = Mean - SE, ymax = Mean + SE),
+    width = 0.07,
+    position = position_dodge(0.9)) +
+  geom_text(data = segs,
+            aes(x = prime_cond,  y = ys, label = lab),
+            size = 3) +
+  coord_cartesian(ylim = c(500, 675)) +
+  labs(x = 'Prime cond', y = 'Mean RTs') +
+  facet_wrap(~ SOA + problem_size, ncol = 2) +
+  theme(
+    #panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(colour = 'grey90'),
+    panel.grid.minor.y = element_line(colour = 'grey90'),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    text = element_text(size = 15),
+    axis.text = element_text(size = 12, colour = 'black'),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    # axis.title = element_text(size = 14),
+    panel.border = element_rect(colour = 'black', fill = NA, size = 0.5))
+
+# show plot
+prime_plot$exp2_box
+```
+
+
+### Plot Bayes factors
+
+```{r, fig.height = 8, fig.width = 8, fig.align = 'center'}
+# Set asterisk position
+segs <- 
+  tribble(
+    ~SOA,       ~problem_size, ~prime_cond, ~lab,  ~ys,
+     'SOA_170',  'small',      'neigh_con',  '11',  9,
+     'SOA_120',  'large',      'neigh_inc',  '191', 9)
+
+# plot prime type
+prime_plot$exp2_bf <- 
+  exp2_bf %>% 
+  mutate(
+    prime_cond = factor(
+      prime_cond,
+      levels = c('neigh_con', 'neigh_inc', 'unrel_con', 'unrel_inc'))
+  ) %>% 
+  ggplot(aes(x = prime_cond, y = BF_10, fill = prime_cond)) +
+  geom_bar(stat = 'identity',
+           fill = 'gray80',
+           width = 0.6,
+           show.legend = FALSE) +
+  geom_text(data = segs,
+                  aes(x = prime_cond,  y = ys, label = lab),
+                  size = 3) +
+  geom_hline(yintercept = c(3, 10, 30, 100),
+             linetype = 'dashed',
+             color = 'red',
+             size = 0.5) +
+  coord_cartesian(ylim = c(0, 10)) +
+  labs(x = 'Prime cond', y = bquote('Bayes factor (' ~BF[10]~ ')')) +
+  facet_wrap(~ SOA + problem_size, ncol = 2) +
+  theme(
+    #panel.grid.major = element_blank(),
+    #panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(colour = 'grey90'),
+    panel.grid.minor.y = element_line(colour = 'grey90'),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    text = element_text(size = 15),
+    axis.text = element_text(size = 12, colour = 'black'),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    # axis.title = element_text(size = 14),
+    panel.border = element_rect(colour = 'black', fill = NA, size = 0.5))
+  NULL
+
+# show plot
+prime_plot$exp2_bf
+```
+
+
+# Frequentist t-tests 
+
+Calculate the t-tests between neutral prime and other conditions (the results 
+are also saved in the folder **results**)
+
+```{r}
+# prepare conditions to compare in the t-tests
+prime_cond_to_comprare <- 
+  list(c('neigh_con', 'neutral'),
+       c('neigh_inc', 'neutral'),
+       c('unrel_con', 'neutral'),
+       c('unrel_inc', 'neutral'))
+
+
+# t-tests between prime conditions
+exp2_ttests <- 
+  exp2 %>% 
+  group_by(SOA, problem_size) %>% 
+  group_nest() %>% 
+  mutate(
+    ttests = map(
+      data,
+      ~return_ttest_2samples(RT,
+                             prime_cond,
+                             prime_cond_to_comprare,
+                             c('sj', 'prime_cond'),
+                             .)
+  )) %>% 
+  select(SOA, problem_size, ttests) %>% 
+  unnest(ttests) %>% 
+  mutate(
+    p_adj = p.adjust(p, method = 'holm'),
+    Sig_adj = p.adjust(p, method = 'holm') < 0.05
+  )
+
+# Print the results in csv and txt files
+exp2_ttests %>% 
+  print_result(., 'exp2_ttests')
+
+# Show the table with the statistics
+exp2_ttests %>%
+  make_table('T-tests for experiment 2')
+```
+
+
+# Save plots in a file
+
+```{r, fig.show='hide'}
+ggarrange(prime_plot$exp2_RT_distr)
+ggsave(here('figures', 'exp2_RTs_distr.tiff'),
+       width = 9,
+       height = 7,
+       dpi = 150) # or dpi = 300
+
+ggarrange(prime_plot$exp2_RT_distr_bw)
+ggsave(here('figures', 'exp2_RTs_distr_bw.tiff'),
+       width = 9,
+       height = 7,
+       dpi = 150) # or dpi = 300
+
+ggarrange(prime_plot$exp2_box)
+ggsave(here('figures', 'exp2_RTs.tiff'),
+       width = 8,
+       height = 6,
+       dpi = 150) # or dpi = 300
+
+ggarrange(prime_plot$exp2_bf)
+ggsave(here('figures', 'exp2_BF.tiff'),
+       width = 8,
+       height = 6,
+       dpi = 150) # or dpi = 300
+```
+
+
+# session information
+
+```{r}
+xfun::session_info()
+```
+
+

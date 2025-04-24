@@ -1,0 +1,248 @@
+---
+title: 'Experiment 1 - analysis delta RTs'
+author: 'Didino Daniele'
+date: 'October 2021'
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = '#>',
+  collapse = TRUE,
+  echo = TRUE)
+```
+
+This file is part of the supplementary material of the manuscript:
+Didino, D., Brandtner, M., & Knops, A. (2021). No influence of masked priming 
+on the multiplication fact retrieval in a result verification task.
+
+This script reports the analysis for experiment 1.
+
+Dataset loaded: **exp1_data.rds** (data of *result verification task*)
+
+
+Load libraries, my functions (**my_functions** folder) and data 
+(**data/processed** folder):
+
+```{r}
+library('ggpubr')
+library('here')
+library('kableExtra')
+# library('knitr')
+library('plotly')
+library('ggridges')
+library('tidyverse')
+library('BayesFactor')
+
+# Load my functions
+source(here('funcs', 'load_my_functions.R'))
+
+# Load data
+exp1 <- readRDS(here('data', 'processed', 'exp1_data.rds'))
+```
+
+
+Exclude outliers
+
+```{r}
+exp1 <- 
+  exp1 %>% 
+  filter(outlier == FALSE)
+```
+
+# Calculate delta RTs
+
+```{r}
+exp1_dRT <- 
+  exp1 %>% 
+  return_delta_RT(.,
+                  y_col = RT,
+                  cols_to_group = c('sj', 'problem_size'),
+                  cols_to_subtract = c('prime_cond'),
+                  neutral_cond = 'neutral')
+```
+
+
+# Delta RTs versus RTs
+
+```{r, fig.height = 4, fig.width = 7, fig.align = 'center'}
+dens_RT <- 
+  ggplot(exp1, aes(RT)) + 
+  geom_density() +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(exp1$RT), sd = sd(exp1$RT)),
+                color = 'blue') +
+      ggtitle('')
+
+
+dens_dRT <- 
+  ggplot(exp1_dRT, aes(dRT)) + 
+  geom_density() +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(exp1_dRT$dRT), sd = sd(exp1_dRT$dRT)),
+                color = 'blue') +
+      ggtitle('')
+  
+ggarrange(dens_RT,
+          dens_dRT,
+          ncol = 2,
+          nrow = 1,
+          labels = c('RT', 'delta RT'))
+```
+
+
+# Delta RTs table
+
+Table with RTs mean, standard deviation and standard error (aggregated on 
+                                                            subject and condition):
+
+```{r}
+# Calculate statistics
+exp1_stats <- 
+  exp1_dRT %>%
+  return_stats(c('problem_size', 'cond'),
+               DV = 'dRT')
+
+# Show results
+exp1_stats %>% 
+  make_table('Statistics (prime condition by problem size)')
+```
+
+
+# Delta RTs plots
+
+RTs distribution across prime conditions:
+
+```{r, fig.height = 4, fig.width = 8, fig.align = 'center'}
+plot_1 <-
+  exp1_dRT %>% 
+  ggplot(aes(dRT, fill = cond)) +
+  geom_density(alpha = 0.6) +
+  facet_wrap(~ problem_size, ncol = 2) 
+
+ggplotly(plot_1)
+```
+
+```{r, fig.height = 4, fig.width = 8, fig.align = 'center'}
+exp1_dRT %>% 
+  ggplot(aes(x = dRT, y = cond, fill = stat(x))) +
+  geom_density_ridges_gradient(scale = 3) +
+  scale_fill_viridis_c(name = 'RTs', option = 'C') +
+  labs(y = 'Prime condition') +
+  facet_wrap(~ problem_size, ncol = 2) 
+```
+
+
+# Bayes factor
+
+Bayes factors are computer with the package **BayesFactor**.
+
+
+```{r}
+tribble(
+  ~BF,      ~Evidence,
+  '0-3',    'Anectodal',
+  '3-10',   'Moderate',
+  '10-30',  'Strong',
+  '30-100', 'Very_strong',
+  '>100',   'Decisive') %>% 
+  make_table('Bayes factor interpretation')
+```
+
+
+
+```{r}
+exp1_bf <- 
+  exp1_dRT %>% 
+  group_by(problem_size, cond) %>% 
+  nest() %>% 
+  mutate(
+    # "DV" is the column with the means returned by "return_means()"
+    BF_test = map(data,
+                  ~ttestBF(x = .$dRT,
+                           mu = 0)),
+    BF_value = map(BF_test,
+                   ~extractBF(.) %>% 
+                     tibble %>% 
+                     select(bf, error))
+  ) %>% 
+  unnest(BF_value)
+
+exp1_bf
+
+exp1_bf <- 
+  exp1_bf %>%
+  select(problem_size, cond, bf) %>% 
+  rename(BF_10 = bf) %>% 
+  mutate(
+    BF_01 = 1 / BF_10
+  ) 
+
+# Show results
+exp1_bf %>% 
+  make_table('Bayes factor')
+```
+
+
+# Plot dRT against mean RT (by subject)
+
+
+Create a single data frame with dRT and mean RT (a data point for each
+subject, problem size and prime condition)
+
+```{r}
+# Mean RT by subject
+exp1_meanRT_sj <- 
+  exp1 %>%
+  return_stats(c('sj', 'problem_size', 'cond'),
+               DV = 'RT') %>% 
+  select(sj, problem_size, prime_cond, Mean) %>% 
+  rename(cond = prime_cond) %>% 
+  filter(cond != 'neutral')
+
+# Join data frames
+exp1_dRT_meanRT <- 
+  full_join(exp1_dRT,
+            exp1_meanRT_sj,
+            by = c('sj', 'problem_size', 'cond'))
+```
+
+
+Plot for large problems
+
+```{r}
+exp1_dRT_meanRT %>% 
+  filter(problem_size == 'large') %>% 
+  ggplot(aes(Mean, dRT)) +
+  geom_point() +
+  geom_hline(yintercept = 0,
+             linetype = 'dashed',
+             color = 'red',
+             size = 0.5) +
+  facet_wrap(~ cond)
+```
+
+
+
+Plot for small problems
+
+```{r}
+exp1_dRT_meanRT %>% 
+  filter(problem_size == 'small') %>% 
+  ggplot(aes(Mean, dRT)) +
+  geom_point() +
+  geom_hline(yintercept = 0,
+             linetype = 'dashed',
+             color = 'red',
+             size = 0.5) +
+  facet_wrap(~ cond)
+```
+
+
+# session information
+
+```{r}
+xfun::session_info()
+```

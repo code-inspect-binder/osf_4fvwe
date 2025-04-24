@@ -1,0 +1,287 @@
+---
+title: "Experiment 2 - preprocessing"
+author: "Didino Daniele"
+date: "October 2021"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = "#>",
+  collapse = TRUE,
+  echo = TRUE)
+```
+
+This file is part of the supplementary material of the manuscript:
+Didino, D., Brandtner, M., & Knops, A. (2021). No influence of masked priming 
+on the multiplication fact retrieval in a result verification task.
+
+This script run the data pre-processing of experiment 2.
+
+Dataset loaded: **exp_soa_data.csv** (data of *result verification task*)
+
+Load libraries and data:
+
+```{r}
+library('tidyverse')
+library('here')
+library('janitor')
+library('plotly')
+# library('knitr')
+library('kableExtra')
+
+# Load my functions
+source(here('funcs', 'load_my_functions.R'))
+
+# Load data (included )
+exp2_rowData <- read_csv(here('data', 'rawdata', 'exp_soa_data.csv'))
+```
+
+
+### Evaluate accuracy
+
+Plot accuracy by subject
+
+```{r, fig.height = 6, fig.width = 8, fig.align = 'center'}
+plot_acc_sj <-
+  exp2_rowData %>%
+  group_by(sj) %>%
+  summarise(acc = mean(acc)) %>%
+  ggplot(aes(x = acc, y = sj)) +
+  geom_point() +
+  coord_cartesian(xlim = c(0, 1)) +
+  geom_vline(xintercept = 0.75,
+             linetype = 'dashed',
+             color = 'red',
+             size = 1)
+
+ggplotly(plot_acc_sj)
+```
+
+
+Plot accuracy by block and subject
+
+```{r, fig.height = 4, fig.width = 8, fig.align = 'center'}
+plot_acc_block_sj <- 
+  exp2_rowData %>% 
+  group_by(sj, block) %>% 
+  summarise(acc = mean(acc)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = block, y = acc, group = sj, colour = sj)) +
+  geom_line() +
+  coord_cartesian(ylim = c(0, 1)) +
+  scale_x_discrete(limits = factor(1:10)) +
+  geom_hline(yintercept = 0.75,
+             linetype = 'dashed',
+             color = 'red',
+             size = 1)
+
+ggplotly(plot_acc_block_sj)
+```
+
+
+### Evaluate RTs
+
+Plot RTs by subject
+
+```{r, fig.height = 4, fig.width = 8, fig.align = 'center'}
+plot_RT_sj <-
+  exp2_rowData %>% 
+  filter(acc == 1) %>% 
+  group_by(sj) %>%
+  ggplot(aes(x = sj, y = RT)) +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75))
+
+ggplotly(plot_RT_sj)
+```
+
+
+Plot RT by block and subject
+
+```{r, fig.height = 4, fig.width = 8, fig.align = 'center'}
+plot_RTs_block_sj <- 
+  exp2_rowData %>% 
+  filter(acc == 1) %>% 
+  group_by(sj, block) %>% 
+  summarise(RT = mean(RT)) %>% 
+  ggplot(aes(x = block, y = RT, group = sj, colour = sj)) +
+  geom_line() +
+  scale_x_discrete(limits = factor(1:10))
+
+ggplotly(plot_RTs_block_sj)
+```
+
+
+### Select participants and trials
+
+Excluded participants:
+
+* **SJ 15** has low accuracy (about 50%) in block 2.
+* **SJ 17** has low accuracy (about 50%) in block 10.
+* **SJ 24** has low accuracy (about 50%) in block 6.
+* **SJ 28** has low accuracy (about 26%) in block 1.
+* **SJ 29** has low accuracy (about 56%) in block 8.
+* **SJ 31** has low accuracy (about 62%) in block 10.
+
+
+```{r}
+exp2_excludedSJ <- 
+  exp2_rowData %>% 
+  filter(!(sj %in% c('sj15', 'sj17', 'sj24', 'sj28', 'sj29', 'sj31')))
+```
+
+
+Removed trials:
+  
+* Filler trials
+* Incorrect equation trials (where the proposed result is not the product)
+
+```{r}
+# filler: 0 = experimental trial, 1 = filler trial
+exp2_no_filler <- 
+  exp2_excludedSJ %>% 
+  filter(filler == 0 & probe_type == 'product')
+```
+
+Problems selected for the analysis:
+
+```{r}
+exp2_no_filler %>% 
+  select('op1', 'op2') %>% 
+  table %>%
+  make_table('Problems selected')
+```
+
+
+### Accuracy by conditions
+
+Table with accuracy mean, standard deviation and standard error (aggregated on
+subject and condition)
+
+```{r}
+# Calculate statistics for accuracy
+exp2_stats_acc <- 
+  exp2_no_filler %>%
+  return_stats(c('SOA', 'problem_size', 'prime_cond'), DV = 'acc')
+
+exp2_stats_acc %>% 
+   make_table('Accuracy by problem_size and prime_cond')
+```
+
+
+### Tables with demographics and performance
+
+Tables are created with the my function *return_info()*
+```{r}
+tb <- 
+  return_info(exp2_no_filler)
+```
+
+```{r}
+tb$gender
+```
+
+```{r}
+tb$age
+```
+
+```{r}
+tb$error
+```
+
+```{r}
+tb$omitted
+```
+
+```{r}
+tb$timing
+```
+
+```{r}
+tb$less_200
+```
+
+
+### Exclude trials
+Exclude trials with omitted answer, errors, RT less than 200 ms, and wrong timing (wrong
+stimuli onset/offset)
+
+```{r}
+# Exclude omitted, errors, RT < 200 ms, and wrong timing
+exp2_correct_ans <- 
+  exp2_no_filler %>% 
+  filter((acc == 1) & (RT > 200) & (timing == 'ok'))
+```
+
+
+### Outliers
+
+For each participant, trials more than **2.5 standard deviations** from
+the mean are classified as outliers and excluded from the frequentist
+analysis.
+
+
+```{r, fig.height = 4, fig.width = 8, fig.align = 'center'}
+# identify outlier
+
+threshold = 2.5
+
+exp2_rt_outlier <- 
+  exp2_correct_ans %>%
+  group_by(sj) %>% 
+  mutate(outlier = !between(
+    RT,
+    mean(RT) - (threshold * sd(RT)),
+    mean(RT) + (threshold * sd(RT))
+  )) %>% 
+  ungroup()
+
+
+# percentage outliers
+
+exp2_rt_outlier %>% 
+  summarise(
+    N_outlier = sum(outlier == TRUE),
+    N_trial = length(outlier)
+  ) %>% 
+  mutate(percent_outlier = N_outlier / N_trial * 100) %>% 
+  make_table('Outliers')
+```
+
+
+Plot the trials classified as outliers
+
+```{r, fig.height = 4, fig.width = 9, fig.align = 'center'}
+plot_outlier <- 
+  ggplot(data = exp2_rt_outlier) +
+  geom_boxplot(aes(x = sj, y = RT)) +
+  geom_point(aes(x = sj, y = RT, colour =  outlier),
+             position = position_dodge(0.9, preserve = 'total'),
+             shape = 20,
+             size = 0.5) +
+  theme(axis.text.x = element_text(angle = 50, vjust = 1, hjust = 1))
+
+ggplotly(plot_outlier)
+```
+
+
+### Save processed data
+
+The processed data are saved in the file **data/processed/exp2_data.rds**.
+
+```{r}
+saveRDS(
+  object = exp2_rt_outlier,
+  file = here('data', 'processed', 'exp2_data.rds'))
+```
+
+
+# session information
+
+```{r}
+xfun::session_info()
+```
+
+

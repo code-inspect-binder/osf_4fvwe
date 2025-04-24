@@ -1,0 +1,13 @@
+problem_size,prime_cond,N_sj,Mean,SD,SE,Diff,BF_10,BF_01
+large,identity,28,555,100,19,-43,129,0.01
+large,neigh_con,28,622,113,21,25,2.93,0.34
+large,neigh_inc,28,645,106,20,47,2388.08,0
+large,neutral,28,597,106,20,0,NA,NA
+large,unrel_con,28,603,110,21,5,0.23,4.43
+large,unrel_inc,28,645,125,24,48,70.51,0.01
+small,identity,28,513,84,16,-37,203.26,0
+small,neigh_con,28,573,92,17,23,1.43,0.7
+small,neigh_inc,28,575,103,19,24,5.03,0.2
+small,neutral,28,551,88,17,0,NA,NA
+small,unrel_con,28,600,114,22,50,334.14,0
+small,unrel_inc,28,590,109,21,40,83.18,0.01
