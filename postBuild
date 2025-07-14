@@ -1,0 +1,3 @@
+#!/bin/bash
+
+echo 'setwd("/home/jovyan/4fvwe_src/funcs")' >> /home/jovyan/.Rprofile
